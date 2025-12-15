@@ -1,0 +1,491 @@
+---
+title: "Introduction to BFpack"
+author: "Mulder, J., Williams, D. R., Gu, X., Tomarken, A., Boeing-Messing, F., Olsson-Collentine, A., Meijerink, M., Menke, J., van Aert, R., Fox, J.-P., Hoijtink, H., Rosseel, Y., Wagenmakers, E.-J., and van Lissa, C."
+date: "`r Sys.Date()`"
+output:
+  rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{BFpack_introduction}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Introduction
+
+`BFpack` contains a collection of functions for Bayesian hypothesis testing using Bayes factors and posterior probabilities in R. The main function `BF` needs a fitted model `x` as input argument. Depending on the class of the fitted model, a standard hypothesis test is executed by default. For example, if `x` is a fitted regression model of class `lm` then posterior probabilities are computed of whether each separate coefficient is zero, negative, or positive (assuming equal prior probabilities). If one has specific hypotheses with equality and/or order constraints on the parameters under the fitted model `x` then these can be formulated using the `hypothesis` argument (a character string), possibly together prior probabilities for the hypotheses via the `prior.hyp` argument (default all hypotheses are equally likely a priori), and the `complement` argument which is a logical stating whether the complement hypotheses should be included in the case (`TRUE` by default).
+
+Alternatively, when the model of interest is not of a class that is currently supported, `x` can also be a named numeric vector containing the estimates of the model parameters of interest, together with the error covariance matrix in the argument `Sigma`, and the sample size used to obtain the estimates, to perform an approximate Bayes factor test using large sample theory.
+
+## Reference
+
+The key references for the package are
+
+Mulder, J., Williams, D. R., Gu, X., Tomarken, A., Boeing-Messing, F., Olsson-Collentine, A., Meijerink, M., Menke, J., van Aert, R., Fox, J.-P., Hoijtink, H., Rosseel, Y., Wagenmakers, E.-J., and van Lissa, C. (2021). BFpack: Flexible Bayes Factor Testing of Scientific Theories in R. *Journal of Statistical Software*. <https://www.jstatsoft.org/article/view/v100i18>
+
+Mulder, J., van Lissa, C., Gu, X., Olsson-Collentine, A., Boeing-Messing, F., Williams, D. R., Fox, J.-P., Menke, J., et al. (2021). BFpack: Flexible Bayes Factor Testing of Scientific Expectations. (Version 0.3.2) <https://CRAN.R-project.org/package=BFpack>
+
+## Usage
+
+`BF(x, hypothesis, prior.hyp = NULL, complement = TRUE, ...)`
+
+
+## Arguments
+
+* `x`, a fitted model object that is obtained using a R-function. The object can be obtained via the following R functions:
+  + `t_test` for t testing,
+  + `bartlett_test` for testing independent group variances,
+  + `aov` for AN(C)OVA testing,
+  + `manova` for MAN(C)OVA testing,
+  + `lm` for linear regresssion analysis, 
+  + `cor_test` for correlation analysis,
+  + `lmer` currently for testing intraclass correlations in random intercept models,
+  + `glm` for generalized linear models,
+  + `coxph` for survival analysis,
+  + `survreg` for survival analysis,
+  + `polr` for ordinal regression,
+  + `zeroinfl` for zero-inflated regression,
+  + `rma` for meta-analysis,
+  + `ergm` or `bergm` for an exponential random graph,
+  + `x` can also be a named vector with estimates of the key parameters.
+
+* `hypothesis`, a character string specifying the hypotheses with equality and/or order constraints on the key parameters of interest.
+  + By default `hypothesis = NULL` which executes exploratory hypothesis tests (examples below).
+  + The parameter names are based on the names of the estimated key parameters. An overview of the key parameters is given using the function `get_estimates`, e.g., `get_estimates(model1),` where `model1` is a fitted model object.
+  + Separate constraints within a hypothesis are separated with an ampersand `&`. Hypotheses are separated using a semi-colon `;`. For example `hypothesis = "weight > height & height > 0; weight = height = 0"` implies that the first hypothesis assumes that the parameter `weight` is larger than the parameter `height` and that the parameter `height` is positive, and the second hypothesis assumes that the two parameters are equal to zero. Note that the first hypothesis could equivalently have been written as `weight > height > 0`.
+* `prior.hyp.explo`, a numeric vector specifying the prior probabilities of the hypotheses in the exploratory tests. In the default setting, the null hypothesis has a prior probability of `0.50`, and each of the two one-sided hypotheses both have a prior probability of `0.25`.
+* `prior.hyp.conf`, a numeric vector specifying the prior probabilities of the hypotheses of the `hypothesis` argument. The default setting is `prior.hyp = NULL` which sets equal prior probabilities.
+* `complement`, a logical value which specified if a complement hypothesis is included in the tested hypotheses specified under `hypothesis`. The default setting is `TRUE`. The complement hypothesis covers the remaining parameters space that is not covered by the constrained hypotheses. For example, if an equality hypothesis and an order hypothesis are formulated, say, `hypothesis = "weight = height = length; weight > height > length"`, the complement hypothesis covers the remaining subspace where neither `"weight = height = length"` holds, nor `"weight > height > length"` holds.
+* `log`, a logical specifying whether the Bayes factors should be computed on a log scale. Default is `FALSE`.
+
+Alternatively if one is interested in testing hypotheses under a model class which that is currently not supported, an approximate Bayesian test can be executed with the following (additional) arguments
+
+* `x`, a named numeric vector of the estimates (e.g., MLE) of the parameters of interest where the labels are equal to the names of the parameters which are used for the `hypothesis` argument.
+* `Sigma`, the approximate posterior covariance matrix (e.g,. error covariance matrix) of the parameters of interest.
+* `n`, the sample size that was used to acquire the estimates and covariance matrix.
+
+
+## Output
+
+The output is of class `BF`. By running the `print` function on the `BF` object, a short overview of the results are presented. By running the `summary` function on the `BF` object, a comprehensive overview of the results are presented. 
+
+
+## Example analyses
+
+### Normal linear models (t-testing, linear regression, (M)AN(C)OVA)
+
+For an object of class `t_test` (t testing), `lm` (linear regression), `lml` (multivariate linear regression), `aov` (AN(C)OVA), `manova` (MAN(C)OVA), the evidence and posterior probabilities are computed using the fractional Bayes factor (FBF) methodology [O'Hagan (1995) ](https://rss.onlinelibrary.wiley.com/doi/abs/10.1111/j.2517-6161.1995.tb02017.x). Manual prior specification is avoided by using a minimal fraction of the data to construct a default (fractional) prior while the remaining fraction is used for hypothesis testing. For a simple t-test, there are 2 unknown parameters (the normal mean and the variance), and therefore at least 2 observations are required to identify the model, yielding a minimal fraction of `2/n`, where `n` is the sample size. In this case, the default prior follows a Cauchy distribution. In the case of grouping variables, i.e., variables of class `factor` in R, it is recommended that the minimal fractions depend on the respective group sizes [De Santis and Spezzaferri (2001)](https://doi.org/10.1016/S0378-3758(00)00240-8). For instance, in case of an ANOVA with 2 groups (equivalent to a 2-sample t test with equal variances), there are 3 unknown parameters (the two normal means and the within-groups variance), and thus, at least 3 observations are required to identify the model. Therefore, the minimal fraction for the observations in group 1 and 2 are equal to `1.5/n_1` and `1.5/n_2`, where `n_1` and `n_2` are the sample sizes in group 1 and 2, respectively. In the resulting `BF` object, the element `fraction_groupID_observations` contains the group IDs, which are based on all combinations of the levels of the factors in the linear model. If no grouping variables (`factor`) are included as predictors, the same minimal fraction is used for all observations. Moreover, besides regular fractional Bayes factors (which is the current default), adjusted fractional Bayes factors (AFBF) can also be computed by setting the argument `BF.type = AFBF`. In the AFBF, the default prior is shifted to the null value ([Mulder, 2014](https://doi.org/10.1016/j.csda.2013.07.017); [Mulder and Olsson-Collentine, 2019](https://doi.org/10.3758/s13428-018-01196-9)). The AFBF was specifically designed for testing hypotheses with only one-sided or order constraints. The general methodology for the multivariate linear model is discussed in [Mulder et al. (2021) ](https://www.jstatsoft.org/article/view/v100i18) and [Mulder and Gu (2021)](https://doi.org/10.1080/00273171.2021.1904809). 
+
+#### Univariate t testing
+
+First a classical one sample t test is executed for the test value
+\(\mu = 5\) on the therapeutic data
+
+``` r
+ttest1 <- bain::t_test(therapeutic, alternative = "greater", mu = 5)
+```
+
+The `t_test` function is part of the ***bain*** package. The function is
+equivalent to the standard `t.test` function with the addition that the
+returned object contains additional output than the standard `t.test`
+function.
+
+To see which parameters can be tested on this object run
+``` r
+get_estimates(ttest1)
+```
+which shows that the only parameter that can be tested is the population mean which has name `mu`.
+
+To perform an exploratory Bayesian t test of whether the population mean is equal to, smaller than, or larger than the null value (which is `5` here, as specified when defining the `ttest1` object), one needs to run `BF` function on the object.
+
+``` r
+library(BFpack)
+BF1 <- BF(ttest1)
+```
+
+This executes an exploratory ('exhaustive') test around the null value: `H1: mu = 5`
+versus `H2: mu < 5` versus `H3: mu > 5` assuming equal prior
+probabilities for `H1`, `H2`, and `H3` of 1/3. The output presents the
+posterior probabilities for the three hypotheses.
+
+The same test would be executed when the same hypotheses are explicitly
+specified using the `hypothesis` argument.
+
+``` r
+hypothesis <- "mu = 5; mu < 5; mu > 5"
+BF(ttest1, hypothesis = hypothesis)
+```
+
+In the above test the complement hypothesis is excluded automatically as the formualted hypothesis under the `hypothesis` argument cover the complete parameter space. Furthermore, when testing hypotheses via the `hypothesis` argument, the output also presents an `Evidence matrix` containing the Bayes factors between the hypotheses formulated in the `hypothesis` argument.
+
+A standard two-sided test around the null value `mu` is executed by setting the hypothesis argument equal to the precise null hypothesis so that the complement hypothesis (which is included by default) corresponds to the hypothesis that assumes that the population mean is anything but the null value
+
+``` r
+hypothesis <- "mu = 5"
+BF(ttest1, hypothesis = hypothesis)
+```
+
+The argument `prior.hyp` can be used to specify different prior probabilities
+for the hypotheses. For example, when the left one-tailed hypothesis is not possible
+based on prior considerations (e.g., see [Mulder et al. (2021, Section 4.1)](https://www.jstatsoft.org/article/view/v100i18)) while the precise (null) hypothesis and the right
+one-tailed hypothesis are equally likely, the argument `prior.hyp` should be a vector
+specifying the prior probabilities of the respective hypotheses
+``` r
+BF(ttest1, hypothesis = "mu = 5; mu < 5; mu > 5", prior.hyp = c(.5,0,.5))
+```
+
+For more information about the methodology, we refer the interested reader to [Mulder et al. (2021)](https://www.jstatsoft.org/article/view/v100i18) and [Mulder and Gu (2021)](https://doi.org/10.1080/00273171.2021.1904809).
+
+
+#### Multivariate t testing
+
+Bayesian multivariate t tests can be executed by first fitting a multivariate (regression) model using the `lm` function, and subsequently, the means of the dependent variables (or other coefficients) in the model can be tested using the `BF()` function. Users have to be aware however that means are modeled using intercepts which are named `(Intercept)` by default by `lm` while the hypothesis argument in `BF()` does not allow effect names that include brackets (i.e., `(` or `)`). To circumvent this, one can create a vector of 1s, with name (say) `ones`, to replace the intercept. For example, let us consider a multivariate normal model for the dependent variables `Superficial`, `Middle`, and `Deep` in the `fmri` data set:
+
+``` r
+fmri1 <- cbind(fmri,ones=1)
+mlm1 <- lm(cbind(Superficial,Middle,Deep) ~ -1 + ones, data = fmri1)
+```
+
+Next, we can (for instance) test whether all means equal 0 (`H1`), whether all means are positive (`H2`), or none of these two hypotheses (`complement`):
+
+``` r
+BFmlm1 <- BF(mlm1, hypothesis="ones_on_Superficial=ones_on_Middle=ones_on_Deep=0;
+                               (ones_on_Superficial,ones_on_Middle,ones_on_Deep)>0")
+```
+
+#### Analysis of variance
+
+First an analysis of variance (ANOVA) model is fitted using the `aov`
+fuction in `R`.
+
+``` r
+aov1 <- aov(price ~ anchor * motivation, data = tvprices)
+```
+
+Next a Bayesian test can be performed on the fitted object. By default
+exploratory tests are executed of whether the individual main and interaction effects
+are zero or not (corresponding to the full model) (see [Mulder et al. (2021, Section 4.2)](https://www.jstatsoft.org/article/view/v100i18))
+
+``` r
+BF(aov1)
+```
+
+One can also test for specific equal/order hypotheses based on scientific expectations
+such as whether `anchorrounded` is positive, `motivationlow` is negative, and the interaction
+effect `anchorrounded:motivationlow` is negative (see [Mulder et al. (2021, Section 4.2)](https://www.jstatsoft.org/article/view/v100i18)) versus null hypothesis versus the complement hypothesis
+(which assumes that the constraints of neither two hypotheses hold). This test can be executed
+as follows:
+``` r
+constraints2 <- "anchorrounded > 0 & motivationlow < 0 &
+  anchorrounded:motivationlow < 0; anchorrounded = 0 &
+  motivationlow = 0 & anchorrounded:motivationlow = 0"
+set.seed(1234)
+BF(aov1, hypothesis = constraints2)
+```
+
+
+#### Univariate and multivariate multiple regression
+
+For a univariate regression model, by default an exhaustive test is
+executed of whether an effect is zero, negative, or postive.
+
+``` r
+lm1 <- lm(Superficial ~ Face + Vehicle, data = fmri)
+BF1 <- BF(lm1)
+print(BF1)
+```
+
+Hypotheses can be tested with equality and/or order constraints on the
+effects of interest. If prefered the complement hypothesis can be
+omitted using the `complement`
+argument
+
+``` r
+BF2 <- BF(lm1, hypothesis = "Vehicle > 0 & Face < 0; Vehicle = Face = 0",
+          complement = FALSE)
+print(BF2)
+```
+
+In a multivariate regression model hypotheses can be tested on the
+effects on the same dependent variable, and on effects across different
+dependent variables. The name of an effect is constructed as the name of
+the predictor variable and the dependent variable separated by `_on_`.
+Testing hypotheses with both constraints within a dependent variable and
+across dependent variables makes use of a Monte Carlo estimate which may
+take a few seconds.
+
+``` r
+lm2 <- lm(cbind(Superficial, Middle, Deep) ~ Face + Vehicle,
+              data = fmri)
+constraint2 <- "Face_on_Deep = Face_on_Superficial = Face_on_Middle < 0 <
+     Vehicle_on_Deep = Vehicle_on_Superficial = Vehicle_on_Middle;
+     Face_on_Deep < Face_on_Superficial = Face_on_Middle < 0 < Vehicle_on_Deep =
+     Vehicle_on_Superficial = Vehicle_on_Middle"
+set.seed(123)
+BF3 <- BF(lm2, hypothesis = constraint2)
+summary(BF3)
+```
+
+For more information about the methodology, we refer the interested reader to [Mulder and Olsson-Collentine (2019)](https://link.springer.com/article/10.3758/s13428-018-01196-9) and [Mulder and Gu (2021)](https://doi.org/10.1080/00273171.2021.1904809)
+
+
+### Testing independent group variances
+
+First a classical significance test is executed using the `bartlett_test` function, which is part of the ***BFpack*** package. The function is equivalent to the standard `bartlett.test` function with the addition that the returned object contains additional output needed for the test using the `BF` function.
+
+``` r
+bartlett1 <- bartlett_test(x = attention$accuracy, g = attention$group)
+```
+
+On an object of this class, by default `BF` executes an exploratory test of homogeneity (equality) of variances against an unconstrained (full) model
+
+``` r
+BF(bartlett1)
+```
+
+The group variances have names `ADHD`, `Controls`, and `TS`. This can be retrieved by running 
+``` r
+get_estimates(bartlett1)
+```
+Let's say we want to test whether a hypothesis (H1) which assumes that  group variances of groups `Controls` and `TS` are equal and smaller than the group variance of the `ADHD` group, a hypothesis (H2) which assumes that the group variances of `ADHD` and `TS` are equal and larger than the `Controls` group, a hypothesis (H3) which assumes all group variances are equal, and a complement hypothesis (H4). To do this we run the following:
+
+``` r
+hypothesis <- "Controls = TS < ADHD; Controls < TS = ADHD; Controls = TS = ADHD"
+set.seed(358)
+BF_var <- BF(bartlett1, hypothesis)
+```
+
+A comprehensive output of this analysis can be obtained by running:
+
+``` r
+summary(BF_var)
+```
+
+which presents the results of an exploratory analysis and the results of a confirmatory analysis (based on the hypotheses formulated under the `hypothesis` argument). The exploratory analysis tests a hypothesis which assumes that the variances are equal across groups (homogeneity of variances) versus an alternative unrestricted hypothesis. The output shows that the posterior probabilities of these two hypotheses are approximately 0.803 and 0.197 (assuming equal priori probabilities). Note that the p value in the classical Bartlett test for these data equals 0.1638 which implies that the hypothesis of homogeneity of variances cannot be rejected using common significance levels, such as 0.05 or 0.01. Note however that this p value cannot be used as a measure for the evidence in the data in favor of homogeneity of group variances. This can be done using the proposed Bayes factor test which shows that the probability that the variances are equal is approximately 0.803. Also note that the exploratory test could equivalently tested via the `hypothesis` argument by running `BF(bartlett1, "Controls = TS = ADHD")`.
+
+The confirmatory test shows that H1 receives strongest support from the data, but H2 and H3 are viable competitors. It appears that even the complement H3 cannot be ruled out entirely given a posterior prob- ability of 0.058. To conclude, the results indicate that TS population are as heterogeneous in their attentional performances as the healthy control population in this specific task, but further research would be required to obtain more conclusive evidence.
+
+For more information about the methodology, we refer the interested reader to [Boing-Messing et al. (2017)](https://www.researchgate.net/publication/317418250_Bayesian_evaluation_of_constrained_hypotheses_on_variances_of_multiple_independent_groups)
+
+
+### Testing correlations
+
+`BFpack` can be used for testing overlapping, nonoverlapping, and independent correlations, between variables of different measurement levels (continuous, dichotomous, ordinal), possibly while correcting for certain covariates. Joint uniform priors are specified for the correlations in the full correlation matrices. This implies that all combinations of correlation values that result in positive definite correlation matrices are equally likely a priori.
+
+By default `BF` performs exhaustive tests of whether the separate
+correlations are zero, negative, or positive.
+
+``` r
+set.seed(123)
+cor1 <- cor_test(memory[,1:3])
+BF1 <- BF(cor1)
+print(BF1)
+```
+
+The names of the
+correlations is constructed using the names of the variables separated
+by `_with_`:
+``` r
+get_estimates(cor1)
+```
+
+Specific hypotheses based on prior/theoretical considerations can be tested using the 
+`hypothesis` argument. As an example we show here how to test whether all
+correlations are equal and positive versus its complement. 
+``` r
+BF2 <- BF(cor1, hypothesis = "Del_with_Im = Wmn_with_Im = Wmn_with_Del > 0")
+print(BF2)
+```
+
+We can also test equality and order constraints on independent correlations across different groups. As the seventh column of the `memory` object is a group indicator, let us first create different objects for the two different groups, and perform Bayesian estimation on the correlation matrices of the two different groups 
+``` r
+memoryHC <- subset(memory,Group=="HC")[,-(4:7)]
+memorySZ <- subset(memory,Group=="SZ")[,-(4:7)]
+set.seed(123)
+cor1 <- cor_test(memoryHC,memorySZ)
+```
+
+In this case with multiple groups by default exploratory tests are executed of whether the correlations
+are zero, negative, or positive for each separate group (e.g., correlations in group `gr1`
+are denoted by `_in_gr1` at the end of the name)
+``` r
+get_estimates(cor1)
+```
+
+Next we test the one-sided hypothesis that the respective correlations in the first group (`g1`) are larger than the correlations in the second group (`g2`) via
+
+``` r
+set.seed(123)
+BF6_cor <- BF(cor1, hypothesis =
+  "Del_with_Im_in_g1 > Del_with_Im_in_g2 &
+  Del_with_Wmn_in_g1 > Del_with_Wmn_in_g2 &
+  Im_with_Wmn_in_g1 > Im_with_Wmn_in_g2")
+```
+
+By running `print(BF6_cor)`, the output shows that the one-sided hypothesis received a posterior probability of 0.991 and the alternative received a posterior probability of .009 (assuming equal prior probabilities).
+
+For more information about the methodology, we refer the interested reader to [Mulder (2016)](https://www.researchgate.net/publication/280256902_Bayes_factors_for_testing_order-constrained_hypotheses_on_correlations) and [Mulder and Gelissen (2019)](https://doi.org/10.1080/02664763.2021.1992360)
+
+
+### Meta-analyses
+
+`BFpack` supports testing the mean effect in a fixed effects meta-analysis model, a random effects model, and a (hybrid) marginalized random effects meta-analysis (marema) model. Depending on the nature of the parameter, different default priors are readily implemented. For testing a standardized effect (set `BF.type = "stand.effect"`), a normal prior with mean 0 and standard deviation 0.5 is specified which implies that, on average, medium (0.5) standardized effect sizes are expected (if the null is false). For testing a log odds (set `BF.type = "log.odds"`), a Student prior with mean 0, scale 2.36, and 13.1 degrees of freedom is used, which corresponds to success probabilities following uniform priors in the interval (0,1). For testing correlations (set `BF.type = "correlation"`), a logistic prior with scale 0.5 is used for the Fisher transformed correlation, which corresponds to a uniform prior for the correlation in the interval (-1,1). To specify a unit-information prior (set `BF.type = "unit.info"`), the total sample size `sum(ni)` is used to construct a minimally informative normal unit-information prior using the sample sizes `ni` of the individual studies from the `rma.uni` object. For a manually specified prior, the argument `BF.type` needs to be an object of class `prior` from the `metaBMA` package. Note that in order for the Bayes factors to be meaningful, the prior should reflect a plausible range of values given the available context. Arbitrarily vague priors (which can be used for estimation) should not be used for Bayes factor testing.
+
+For illustrative purposes, we use hypothetical simulated data for standardized effect sizes:
+
+``` r
+set.seed(123)
+tau2 <- 0.05
+vi <- runif(10, min = 0.01, max = 0.2)
+yi <- rnorm(10, mean = 0, sd = sqrt(vi+tau2))
+```
+
+where `tau2` denotes the true between-study heterogeneity, `vi` is a vector containing the squared standard errors of 10 studies, and `yi` is a vector containing the estimated effects sizes in the 10 studies. To test the overall effect size and the between-study heterogeneity using `BFpack`, an initial meta-analysis needs to be executed using the `metafor` package. A random effects meta-analysis model is considered:
+
+``` r
+res1 <- metafor::rma(yi = yi, vi = vi)
+```
+
+Subsequently, the output is plugged into the `BF` function using the default prior for a standardized effect (normal prior with mean of 0 and a sd of 0.5). For a random effects model (`res1$method` does not equal `"EE"` or `"FE"`), `BFpack` computes Bayes factors and posterior probabilities of a zero, negative, and positive mean effect:
+
+``` r
+BFmeta1 <- BF(res1, BF.type = "stand.effect")
+```
+
+The `summary` output gives the posterior probabilities for a zero, negative, and positive mean effect size `mu` assuming equal prior probabilities:
+
+``` r
+summary(BFmeta1)
+```
+
+The results indicate support for a zero effect with a posterior probability of approximately 0.75 under both the random effects model and the marema model.
+
+Under the random effects model and the marema model, the posterior mean and median, the lower and upper bound of the 95% Bayesian credible intervals, and the posterior probability that the parameters are positive can be obtained by calling:
+
+``` r
+BFmeta1$estimates
+```
+
+Note that under the marema model, the between-study heterogeneity `tau2` can attain negative values (indicating support for a fixed effects model). Therefore, the posterior probability that `tau2` is positive under the marema model gives an indication of the posterior support of a random effects model given the available data. In this case, the posterior probability that `tau2` is positive is about 0.95, which indicates clear support for a random effects model.
+
+In order to test the mean effect under a fixed effects meta-analysis model, this needs to be specified when fitting the initial meta-analytic model:
+
+``` r
+res2 <- metafor::rma(yi = yi, vi = vi, method = "EE")
+BFmeta2 <- BF(res2, BF.type = "stand.effect")
+```
+
+For more information about the methodology, we refer the interested reader to [Van Aert and Mulder (2021)](https://link.springer.com/article/10.3758/s13423-021-01918-9) and Mulder and van Aert (in prep.).
+
+
+### Exponential random graph models
+...
+
+### Network autocorrelation models
+...
+
+### Hypothesis testing using normal approximations
+
+### Running `BF` on a named vector
+
+The input for the `BF` function can also be a named vector containing
+the estimates of the parameters of interest. In this case the error
+covariance matrix of the estimates is also needed via the `Sigma`
+argument, as well as the sample size that was used for obtaining the
+estimates via the `n` argument. Bayes factors are then computed using
+Gaussian approximations of the likelihood (and posterior), similar as in
+classical Wald test. Furthermore, a minimally informative default prior is automatically constructed using a minimal fraction of the data, similar as the adjusted fractional Bayes factor. The minimal fraction is constructed by dividing the number of parameters that are tested in the hypothesis by the total sample size `n`. Moreover, the prior is shifted to the null value, resulting in an approximate adjusted fractional Bayes factor. This methodology is used by default in case the input object `x` has class `glm`, `coxph`, `survreg`, 
+`polr`, and `zeroinfl`. Below we first show how the function can be used for testing coefficients in a logistic regression model, and then we show how the function can be used for testing coefficients in a poisson regression model and as well an equivalent analysis when `x` is a named vector using the MLEs, error covariance matrix `Sigma`, and sample size `n`.
+
+
+#### Logistic regression
+
+An example hypothesis test is considered under a logistic regression
+model. First a logistic regression model is fitted using the `glm`
+function
+
+``` r
+fit_glm <- glm(sent ~ ztrust + zfWHR + zAfro + glasses + attract + maturity +
+               tattoos, family = binomial(), data = wilson)
+```
+
+By default exploratory exhaustive tests are executed of whether the separate
+regression coefficients are zero, negative, or positive:
+``` r
+BF(fit_glm)
+```
+
+The names of the regression coefficients on which constrained hypotheses
+can be formualted can be extracted using the `get_estimates` function.
+
+``` r
+get_estimates(fit_glm)
+```
+Two different hypotheses are formulated with competing equality and/or
+order constraints on the regression coefficients of interest [Mulder et al. (2021, Section 4.4) ](https://www.jstatsoft.org/article/view/v100i18)
+
+``` r
+BF_glm <- BF(fit_glm, hypothesis = "ztrust > (zfWHR, zAfro) > 0;
+             ztrust > zfWHR = zAfro = 0")
+summary(BF_glm)
+```
+
+By calling the `summary` function on the output object of class `BF`,
+the results of the exploratory tests are presented of whether each
+separate parameter is zero, negative, or positive, and the results of
+the confirmatory test of the hypotheses under the `hypothesis` argument
+are presented. When the hypotheses do not cover the complete parameter
+space, by default the complement hypothesis is added which covers the
+remaining parameter space that is not covered by the constraints under
+the hypotheses of interest. In the above example, the complement
+hypothesis covers the parameter space where neither `"ztrust > (zfWHR,
+zAfro) > 0"` holds, nor where `"ztrust > zfWHR = zAfro = 0"` holds.
+
+For more information about the methodology, we refer the interested reader to [Gu et al. (2018)](https://bpspsychub.onlinelibrary.wiley.com/doi/full/10.1111/bmsp.12110?casa_token=tjWwoVqLI7QAAAAA%3Ac84DWKNw8pf23ybOgZTs1pzgyZMuCc-BeTaPFj8vnfnTytzHd0gr-D9ymVxYbKj_MTO1ITGFW8tGBZ1J) and [Mulder et al. (2021)](https://www.jstatsoft.org/article/view/v100i18)
+
+
+#### Poisson regression
+
+We illustrate this for a Poisson regression model
+
+``` r
+poisson1 <- glm(formula = breaks ~ wool + tension, data = datasets::warpbreaks,
+             family = poisson)
+```
+
+The estimates, the error covariance matrix, and the sample size are
+extracted from the fitted model
+
+``` r
+estimates <- poisson1$coefficients
+covmatrix <- vcov(poisson1)
+samplesize <- nobs(poisson1)
+```
+
+Constrained hypotheses on the parameters `names(estimates)` can then be
+tested as follows
+
+``` r
+BF1 <- BF(estimates, Sigma = covmatrix, n = samplesize, hypothesis = 
+  "woolB > tensionM > tensionH; woolB = tensionM = tensionH")
+```
+
+Note that the same hypothesis test would be executed when calling
+
+``` r
+BF2 <- BF(poisson1, hypothesis = "woolB > tensionM > tensionH;
+          woolB = tensionM = tensionH")
+```
+
+because the same Bayes factor is used when running `BF` on an object of
+class `glm` (see `Method: Bayes factor using Gaussian approximations`
+when calling `print(BF1)` and `print(BF2)`).
+
+For more information about the methodology, we refer the interested reader to [Gu et al. (2018)](https://bpspsychub.onlinelibrary.wiley.com/doi/full/10.1111/bmsp.12110?casa_token=tjWwoVqLI7QAAAAA%3Ac84DWKNw8pf23ybOgZTs1pzgyZMuCc-BeTaPFj8vnfnTytzHd0gr-D9ymVxYbKj_MTO1ITGFW8tGBZ1J)
+
+
+
